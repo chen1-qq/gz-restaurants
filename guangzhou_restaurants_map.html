@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>广州粤菜餐厅分布地图</title>
+    <script type="text/javascript">
+        window._TMapSecurityConfig = {
+            serviceHost: "https://lbsproxy.qclaw.qq.com/aizone/qclaw/v1/tmapService",
+        };
+    </script>
+    <script src="https://map.qq.com/api/gljs?v=1.exp&libraries=visualization,service"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            font-family: 'Microsoft YaHei', sans-serif;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        #title {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #FF6B6B 0%, #EE5A24 100%);
+            color: white;
+            padding: 12px 32px;
+            border-radius: 25px;
+            font-size: 18px;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(238, 90, 36, 0.4);
+            z-index: 1000;
+        }
+        #stats {
+            position: absolute;
+            top: 80px;
+            left: 30px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            font-size: 14px;
+            max-width: 200px;
+        }
+        #stats h4 {
+            color: #EE5A24;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        #stats p {
+            margin: 5px 0;
+            color: #666;
+        }
+        #stats .count {
+            font-weight: bold;
+            color: #333;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px 40px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            z-index: 2000;
+            text-align: center;
+        }
+        #loading h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        #loading p {
+            color: #666;
+            margin: 5px 0;
+        }
+        #info {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            font-size: 13px;
+            max-width: 300px;
+            display: none;
+        }
+        #info h4 {
+            color: #EE5A24;
+            margin-bottom: 8px;
+            font-size: 15px;
+        }
+        #info p {
+            color: #666;
+            margin: 4px 0;
+            line-height: 1.5;
+        }
+        .legend {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            font-size: 13px;
+        }
+        .legend h4 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 6px 0;
+        }
+        .legend-icon {
+            width: 20px;
+            height: 28px;
+            margin-right: 10px;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+        }
+        .legend-text {
+            transform: rotate(45deg);
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div id="title">广州粤菜餐厅分布地图</div>
+    <div id="stats">
+        <h4>数据统计</h4>
+        <p>总店铺数: <span class="count" id="totalCount">0</span></p>
+        <p>成功定位: <span class="count" id="successCount">0</span></p>
+        <p>定位失败: <span class="count" id="failCount">0</span></p>
+    </div>
+    <div id="loading">
+        <h3>正在加载餐厅位置...</h3>
+        <p id="progress">准备中...</p>
+    </div>
+    <div id="info"></div>
+    <div class="legend">
+        <h4>图例说明</h4>
+        <div class="legend-item">
+            <div class="legend-icon" style="background: #FF6B6B;"></div>
+            <span>粤菜餐厅</span>
+        </div>
+    </div>
+    <div id="map"></div>
+
+    <script>
+        // 店铺数据（从表格中提取）
+        const restaurants = [
+            { id: 1, name: "厨鼎膳瓦缸鸡饭·筲箕鸡饭", address: "广东省广州市从化区凤仪东路89号4-5号", district: "从化" },
+            { id: 2, name: "牛小灶牛杂煲(番禺永旺店)", address: "广东省广州市番禺区公安局大龙派出所对面收货区(永旺梦乐城5楼牛小灶门店)", district: "番禺" },
+            { id: 3, name: "楼热-火锅新地标", address: "广东省广州市番禺区南村镇登云大路2号之三120房至125房楼热火锅·新地标", district: "番禺" },
+            { id: 4, name: "牛小灶牛杂煲(珠影店)", address: "广东省广州市海珠区新港中路珠影星光城113铺牛小灶", district: "海珠" },
+            { id: 5, name: "小荔园豉油鸡(琶洲保利店)", address: "广东省广州市海珠区龙新街2号保利广场4楼小荔园豉油鸡", district: "海珠" },
+            { id: 6, name: "广府乡下饭庄(萝岗店)", address: "广东省广州市黄埔区开创大道1551-1559号时代创新中心1-2层", district: "黄埔" },
+            { id: 7, name: "和兴酒家·地道粤菜·手工点心", address: "广州市黄埔区永和大道56号珠江嘉园和兴酒家三楼办公室", district: "黄埔" },
+            { id: 8, name: "鲍妈·原汤鲍鱼鸡(克拉广场店)", address: "广州市黄埔区永和街道摇田河大街75号碧桂园克拉广场1层101号铺鲍妈", district: "黄埔" },
+            { id: 9, name: "知青大院子", address: "广东省广州市黄埔区长岭街道岭新路南岭头商贸商行", district: "黄埔" },
+            { id: 10, name: "6号海鲜码头", address: "广州市黄埔区香荔一路6号鸿记6号海鲜码头大排档", district: "黄埔" },
+            { id: 11, name: "凯威酒家", address: "广州市黄埔区永和街道花轮一路金融大厦2号201凯威酒家", district: "黄埔" },
+            { id: 12, name: "新榕庄记", address: "广州市黄埔区永和街道花轮一路黄埔威尔登酒店4楼新榕记", district: "黄埔" },
+            { id: 13, name: "小啫记", address: "广东省广州市黄埔区萝岗街道开创大道与荔红二路交界锐丰广场7栋1楼114-115号", district: "黄埔" },
+            { id: 14, name: "小荔园豉油鸡(萝岗万达店)", address: "广东省广州市黄埔区科丰路89号万达广场(萝岗店)3F", district: "黄埔" },
+            { id: 15, name: "文华老伙记·爽皮鸡怀旧粤菜(黄埔夏园店)", address: "广州市黄埔区黄埔东路2763号201房(夏园地铁站D口步行240米)", district: "黄埔" },
+            { id: 16, name: "文华老伙记·爽皮鸡怀旧粤菜(黄埔南岗店)", address: "广州市黄埔区南岗街道黄埔东路3713号二层201-201号(南岗地铁D口出口，左转亨元牌坊里面20米到正门)", district: "黄埔" },
+            { id: 17, name: "东欧海鲜酒家(狮岭店)", address: "广东省广州市花都区新雅街道凤凰南路55号2号楼(东欧海鲜酒家)", district: "花都" },
+            { id: 18, name: "郑鹏鹏潮汕大排档(迎宾大道店)", address: "广东省广州市花都区迎宾大道70号郑鹏鹏潮汕大排档放一楼门口前台", district: "花都" },
+            { id: 19, name: "悦榕庄顺德菜芳村总店·十八年老字号", address: "广州市荔湾区穗盐路2号悦榕庄顺德菜", district: "荔湾" },
+            { id: 20, name: "胡须哥竹筒菜(芳村店)", address: "广东省广州市荔湾区茶滘街道穗盐路11号首层之15号", district: "荔湾" },
+            { id: 21, name: "小荔园豉油鸡", address: "芳村大道东146-166号地铁D出口广州聚龙湾太古里W区01栋W01-L302(lululemon对面)", district: "荔湾" },
+            { id: 22, name: "顺心知味·粤菜·手工茶点(佳兆业广场店)", address: "体育西路191号佳兆业广场F2", district: "天河" },
+            { id: 23, name: "烧食佳(信达金茂广场店)", address: "广州大道北信达金茂", district: "天河" },
+            { id: 24, name: "聚馨创意私厨·潮菜·私房菜(东圃地铁站店)", address: "广州市天河区东圃二马路67号创境汇盈科智谷创新产业中心2栋3楼聚馨餐厅", district: "天河" },
+            { id: 25, name: "荔枝楼酒家·宴会厅(车陂店)", address: "广东省广州市天河区高地大厦北门二楼", district: "天河" },
+            { id: 26, name: "丰财鸽煲", address: "广东省广州市天河区棠下街道棠下D2出口丰财鸽煲", district: "天河" },
+            { id: 27, name: "禄运茶居·手工点心(体育西店)", address: "广东省广州市天河区六运一街17号文昌商务楼1-3层", district: "天河" },
+            { id: 28, name: "大可以饭店(天河都市广场店)", address: "广东省广州市天河区员村二横路2号天河都市购物广场5楼", district: "天河" },
+            { id: 29, name: "牛小灶牛杂煲(体育西路店)", address: "广东省广州市天河区体育西路75号143房-牛小灶牛杂煲(体育西路店)", district: "天河" },
+            { id: 30, name: "粤顺粤德·粤菜品牌(天河南二路分店)", address: "广州市天河区天河南二路宏发大厦二楼粤顺粤德", district: "天河" },
+            { id: 31, name: "肥强顺德干蒸(广州首店)", address: "天河区天河南2路宏发大厦首层肥强顺德干蒸", district: "天河" },
+            { id: 32, name: "小荔园豉油鸡(正佳广场店)", address: "广东省广州市天河区天河南街道正佳广场3楼东街(东南门)", district: "天河" },
+            { id: 33, name: "啫火啫啫煲(正佳广场店)", address: "广州天河区正佳广场三楼北街啫火啫啫煲", district: "天河" },
+            { id: 34, name: "苗乡人酸汤牛肉·潮汕牛肉火锅", address: "广东省广州市天河区天河路611号4栋一楼自编1002号商铺苗乡人酸汤牛肉门店前台", district: "天河" },
+            { id: 35, name: "牛小灶牛杂煲(体育西横街店)", address: "体育西横街12号首层(牛小灶牛杂煲)", district: "天河" },
+            { id: 36, name: "蔡澜点心·粤菜(广州正佳广场店)", address: "广州市天河区天河路228好正佳广场6楼601号", district: "天河" },
+            { id: 37, name: "蔡澜点心·粤菜(广州万菱汇店)", address: "广东省广州市天河区天河南街道天河路万菱汇B1层51-55号铺", district: "天河" },
+            { id: 38, name: "叹茶靓点(信达金茂广场店)", address: "广州市天河区广州大道北980号金茂广场5楼", district: "天河" },
+            { id: 39, name: "牛小灶·广府菜·小饭堂(北京路天河城店)", address: "广东省广州市越秀区北京路168号六层601房自编B605-2号铺", district: "越秀" },
+            { id: 40, name: "新兴饭店(北京路店)", address: "广州市越秀区北京路15号第二层201铺", district: "越秀" },
+            { id: 41, name: "悦厨家宴·炖汤品粤(越秀新都会大厦店)", address: "中山六路240号(西门口D出口,地铁负二楼左侧电梯上2楼)", district: "越秀" },
+            { id: 42, name: "新穗悦酒家", address: "广东省广州市越秀区环市东路403号广州国际电子大厦第五层", district: "越秀" },
+            { id: 43, name: "大三元酒家(长堤总店)", address: "广州市越秀区长堤大马路258-266号,长堤大三元酒家7楼办公室", district: "越秀" },
+            { id: 44, name: "惠爱饭店·岭南第一鸡(沿江路店)", address: "广东省广州市越秀区挹翠路3号首层至三层", district: "越秀" },
+            { id: 45, name: "潮发潮汕牛肉店(北京路店)", address: "珠光路201-203号", district: "越秀" },
+            { id: 46, name: "潮发潮汕牛肉店(五月花广场店)", address: "广东省广州市越秀区中山五路68号五月花商业广场F4", district: "越秀" },
+            { id: 47, name: "潮发潮汕牛肉店(星寰店)", address: "广东省广州市越秀区侨光西路11号星寰广场4层23~24号铺", district: "越秀" },
+            { id: 48, name: "合里鲜牛肉火锅", address: "广东省广州市越秀区北京街道西湖路38号首层102铺潮汕", district: "越秀" },
+            { id: 49, name: "小荔园豉油鸡·臻园(星寰店)", address: "广东省广州市越秀区星寰国际5楼小荔园豉油鸡", district: "越秀" },
+            { id: 50, name: "正哥点心专家(新塘大润发店)", address: "广州市增城区新塘镇金海岸广场3楼正哥点心", district: "增城" }
+        ];
+
+        // 初始化地图
+        const map = new TMap.Map('map', {
+            center: new TMap.LatLng(23.1251, 113.2806),
+            zoom: 11,
+            viewMode: '2D'
+        });
+
+        // 创建地址解析服务
+        const geocoder = new TMap.service.Geocoder();
+        const searchService = new TMap.service.Search({ pageSize: 1 });
+
+        // 存储成功解析的店铺
+        const successfulShops = [];
+        const failedShops = [];
+
+        // 更新统计
+        function updateStats() {
+            document.getElementById('totalCount').textContent = restaurants.length;
+            document.getElementById('successCount').textContent = successfulShops.length;
+            document.getElementById('failCount').textContent = failedShops.length;
+        }
+
+        // 创建自定义标记样式 - 使用圆形背景显示序号
+        const markerStyles = {
+            'restaurant': new TMap.MarkerStyle({
+                width: 28,
+                height: 28,
+                anchor: { x: 14, y: 28 },
+                color: '#FFFFFF',
+                size: 11,
+                direction: 'center',
+                backgroundColor: '#EE5A24',
+                backgroundBorderRadius: 14,
+                padding: '2px 4px',
+                backgroundBorderWidth: 2,
+                backgroundBorderColor: '#FFFFFF'
+            })
+        };
+
+        // 创建标记图层
+        const markerLayer = new TMap.MultiMarker({
+            id: 'restaurant-markers',
+            map: map,
+            styles: markerStyles,
+            geometries: []
+        });
+
+        // 解析单个店铺地址
+        async function geocodeRestaurant(restaurant) {
+            try {
+                // 优先使用店铺名称+地址搜索
+                const searchKeyword = restaurant.name;
+                const searchResult = await searchService.searchRegion({
+                    keyword: searchKeyword,
+                    cityName: '广州市',
+                    autoExtend: true
+                });
+
+                if (searchResult.status === 0 && searchResult.data && searchResult.data.length > 0) {
+                    const poi = searchResult.data[0];
+                    return {
+                        success: true,
+                        position: poi.location,
+                        id: restaurant.id,
+                        name: restaurant.name,
+                        address: poi.address || restaurant.address,
+                        district: restaurant.district
+                    };
+                }
+
+                // 如果搜索失败，尝试地址解析
+                const geoResult = await geocoder.getLocation({
+                    address: restaurant.address,
+                    region: '广州市'
+                });
+
+                if (geoResult.status === 0 && geoResult.result && geoResult.result.location) {
+                    return {
+                        success: true,
+                        position: geoResult.result.location,
+                        id: restaurant.id,
+                        name: restaurant.name,
+                        address: restaurant.address,
+                        district: restaurant.district
+                    };
+                }
+
+                return { success: false, name: restaurant.name, error: '未找到位置' };
+            } catch (error) {
+                return { success: false, name: restaurant.name, error: error.message };
+            }
+        }
+
+        // 批量处理所有店铺
+        async function processAllRestaurants() {
+            const loadingEl = document.getElementById('loading');
+            const progressEl = document.getElementById('progress');
+            
+            updateStats();
+
+            // 分批处理，每批5个
+            const batchSize = 5;
+            for (let i = 0; i < restaurants.length; i += batchSize) {
+                const batch = restaurants.slice(i, i + batchSize);
+                progressEl.textContent = `正在解析: ${i + 1} / ${restaurants.length}`;
+                
+                const promises = batch.map((restaurant) => 
+                    geocodeRestaurant(restaurant)
+                );
+                
+                const results = await Promise.all(promises);
+                
+                results.forEach(result => {
+                    if (result.success) {
+                        successfulShops.push(result);
+                    } else {
+                        failedShops.push(result);
+                    }
+                });
+                
+                updateStats();
+                
+                // 延迟一下避免请求过快
+                if (i + batchSize < restaurants.length) {
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                }
+            }
+
+            // 添加标记到地图
+            const geometries = successfulShops.map(shop => ({
+                id: `shop_${shop.id}`,
+                styleId: 'restaurant',
+                position: shop.position,
+                properties: {
+                    id: shop.id,
+                    name: shop.name,
+                    address: shop.address,
+                    district: shop.district
+                },
+                content: String(shop.id)
+            }));
+
+            markerLayer.setGeometries(geometries);
+
+            // 如果有成功的店铺，调整地图视野
+            if (successfulShops.length > 0) {
+                const bounds = new TMap.LatLngBounds();
+                successfulShops.forEach(shop => {
+                    bounds.extend(shop.position);
+                });
+                map.fitBounds(bounds, { padding: 50 });
+            }
+
+            // 隐藏加载提示
+            loadingEl.style.display = 'none';
+
+            // 显示失败列表（如果有）
+            if (failedShops.length > 0) {
+                console.log('定位失败的店铺:', failedShops);
+            }
+        }
+
+        // 点击标记显示详情
+        markerLayer.on('click', (event) => {
+            const geometry = event.geometry;
+            if (geometry && geometry.properties) {
+                const infoDiv = document.getElementById('info');
+                infoDiv.innerHTML = `
+                    <h4>[${geometry.properties.id}] ${geometry.properties.name}</h4>
+                    <p><strong>所属区域:</strong> ${geometry.properties.district}区</p>
+                    <p><strong>地址:</strong> ${geometry.properties.address}</p>
+                `;
+                infoDiv.style.display = 'block';
+            }
+        });
+
+        // 点击地图其他地方隐藏信息框
+        map.on('click', () => {
+            document.getElementById('info').style.display = 'none';
+        });
+
+        // 开始处理
+        processAllRestaurants();
+    </script>
+</body>
+</html>
